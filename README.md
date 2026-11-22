@@ -39,9 +39,3 @@ Configure `deploy/Caddyfile.example` and `.env.deploy` from `.env.deploy.example
 mise exec -- npm run deploy:setup  # First deployment or service changes
 mise exec -- npm run deploy
 ```
-
-### Upgrade an existing installation
-
-Stop and disable the previous systemd unit and back up its SQLite data directory. Before running setup, create the `cookbook` system user and group and copy the stopped data directory into `/var/lib/cookbook`. Set the directory and its contents to `cookbook:cookbook` ownership so the new service can open the database and its sidecar files.
-
-After setup, authorize your deployment SSH key for the `cookbook-deploy` account before running regular deployments.
