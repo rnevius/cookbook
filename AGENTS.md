@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-Artisanist is a personal recipe notebook using Node.js ES modules, Fastify, and SQLite. This is not a public product, so the codebase is small and simple. Don't overcomplicate it.
+Cookbook is a personal recipe notebook using Node.js ES modules, Fastify, and SQLite. This is not a public product, so the codebase is small and simple. Don't overcomplicate it.
 
 The inspiration for the recipe card design is Modernist Cuisine.
 

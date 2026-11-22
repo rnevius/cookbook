@@ -13,7 +13,7 @@ if (args.includes('--help')) {
     'Usage: npm run deploy[:setup]\n' +
       'DEPLOY_HOST is the server hostname or SSH alias.\n' +
       'Requires DEPLOY_URL for HTTPS authentication checks.\n' +
-      'Connects as artisanist-deploy; --setup connects as root.',
+      'Connects as cookbook-deploy; --setup connects as root.',
   );
   process.exit(0);
 }
@@ -34,7 +34,7 @@ if (!host) {
 }
 if (!/^[a-zA-Z0-9][a-zA-Z0-9_.@-]*$/.test(host))
   throw new Error('DEPLOY_HOST must be an SSH alias or user@hostname.');
-const destination = `${setup ? 'root' : 'artisanist-deploy'}@${host.replace(/^.*@/, '')}`;
+const destination = `${setup ? 'root' : 'cookbook-deploy'}@${host.replace(/^.*@/, '')}`;
 const sshOptions = [
   '-o',
   'BatchMode=yes',
@@ -66,7 +66,7 @@ try {
   run('npm', ['run', 'check']);
   run('npm', ['run', 'test:e2e']);
   await checkAuthentication(url);
-  localDirectory = mkdtempSync(join(tmpdir(), 'artisanist-deploy-'));
+  localDirectory = mkdtempSync(join(tmpdir(), 'cookbook-deploy-'));
   const archive = join(localDirectory, 'release.tar.gz');
   // Explicit inputs keep .env, local recipes, and development files off the server.
   run('tar', [
@@ -78,15 +78,15 @@ try {
     'src',
     'public',
     'migrations',
-    'deploy/artisanist.service',
+    'deploy/cookbook.service',
     'deploy/activate.sh',
     'deploy/Caddyfile.example',
     'deploy/remote.sh',
   ]);
-  remoteDirectory = ssh('mktemp -d /tmp/artisanist.XXXXXXXXXX', {
+  remoteDirectory = ssh('mktemp -d /tmp/cookbook.XXXXXXXXXX', {
     stdio: ['ignore', 'pipe', 'inherit'],
   });
-  if (!/^\/tmp\/artisanist\.[a-zA-Z0-9]{10}$/.test(remoteDirectory)) {
+  if (!/^\/tmp\/cookbook\.[a-zA-Z0-9]{10}$/.test(remoteDirectory)) {
     remoteDirectory = undefined;
     throw new Error('Server returned an unexpected staging directory.');
   }
@@ -106,10 +106,10 @@ try {
     await checkAuthentication(url);
   } catch (error) {
     try {
-      ssh('sudo -n /usr/local/sbin/artisanist-activate stop');
+      ssh('sudo -n /usr/local/sbin/cookbook-activate stop');
     } catch {
       console.error(
-        'Could not stop Artisanist after authentication check failed.',
+        'Could not stop Cookbook after authentication check failed.',
       );
     }
     throw error;

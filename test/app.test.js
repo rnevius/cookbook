@@ -16,7 +16,7 @@ const create = (app, payload = exampleRecipe()) =>
   app.inject({ method: 'POST', url: '/api/recipes', payload });
 
 test('CRUD preserves stage, ingredient, and step order across database reopen and migrations', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'artisanist-test-'));
+  const directory = mkdtempSync(join(tmpdir(), 'cookbook-test-'));
   const databasePath = join(directory, 'recipes.sqlite');
   let app = createApp({ databasePath });
   t.after(async () => {

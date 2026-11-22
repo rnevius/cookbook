@@ -22,7 +22,7 @@ export function escape(value = '') {
 export function layout(title, content, script = '') {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escape(title)} · Artisanist</title><link rel="stylesheet" href="/style.css">
+<title>${escape(title)} · Cookbook</title><link rel="stylesheet" href="/style.css">
 ${script ? `<script type="module" src="/${script}.js"></script>` : ''}</head>
 <body><main>${content}</main></body></html>`;
 }

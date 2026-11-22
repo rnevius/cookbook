@@ -1,21 +1,21 @@
 [Unit]
-Description=Artisanist recipe notebook
+Description=Cookbook recipe notebook
 After=network.target
 StartLimitIntervalSec=60
 StartLimitBurst=3
 
 [Service]
 Type=exec
-User=artisanist
-Group=artisanist
-WorkingDirectory=/opt/artisanist/current
-ExecStart=/opt/artisanist/current/runtime/bin/node src/server.js
+User=cookbook
+Group=cookbook
+WorkingDirectory=/opt/cookbook/current
+ExecStart=/opt/cookbook/current/runtime/bin/node src/server.js
 Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
 Environment=PORT=3000
-Environment=DATABASE_PATH=/var/lib/artisanist/recipes.sqlite
+Environment=DATABASE_PATH=/var/lib/cookbook/recipes.sqlite
 Environment=TRUST_PROXY=loopback
-StateDirectory=artisanist
+StateDirectory=cookbook
 StateDirectoryMode=0700
 UMask=0077
 Restart=on-failure

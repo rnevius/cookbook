@@ -3,9 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.ARTISANIST_E2E_DIR ||= mkdtempSync(
-  join(tmpdir(), 'artisanist-e2e-'),
-);
+process.env.COOKBOOK_E2E_DIR ||= mkdtempSync(join(tmpdir(), 'cookbook-e2e-'));
 
 export default defineConfig({
   testDir: './test/browser',
@@ -21,7 +19,7 @@ export default defineConfig({
     env: {
       PORT: '3100',
       HOST: '127.0.0.1',
-      DATABASE_PATH: join(process.env.ARTISANIST_E2E_DIR, 'recipes.sqlite'),
+      DATABASE_PATH: join(process.env.COOKBOOK_E2E_DIR, 'recipes.sqlite'),
     },
   },
 });
