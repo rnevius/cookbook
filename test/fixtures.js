@@ -36,3 +36,5 @@ export function exampleRecipe() {
     ],
   };
 }
+export const examplePhoto =
+  'iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAAD0lEQVR4nGNYl6S0sdgYAAm5AooRf73rAAAAAElFTkSuQmCC';

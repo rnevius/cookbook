@@ -1,8 +1,50 @@
 import Fastify from 'fastify';
 import { readFileSync } from 'node:fs';
 import { openDatabase, recipeStore } from './db.js';
-import { recipeSchema, scaleByReference, validateRecipe } from './recipe.js';
+import {
+  maxPhotoBytes,
+  maxPhotoDataLength,
+  maxRecipePhotos,
+  recipeSchema,
+  scaleByReference,
+  validateRecipe,
+} from './recipe.js';
 import { card, editor, errorPage, library } from './views.js';
+
+const recipeBodyLimit = 1024 * 1024 + maxRecipePhotos * maxPhotoDataLength;
+
+function photoType(bytes) {
+  if (bytes.subarray(0, 3).toString('hex') === 'ffd8ff') return 'image/jpeg';
+  if (bytes.subarray(0, 8).toString('hex') === '89504e470d0a1a0a')
+    return 'image/png';
+  if (
+    bytes.subarray(0, 4).toString() === 'RIFF' &&
+    bytes.subarray(8, 12).toString() === 'WEBP'
+  )
+    return 'image/webp';
+  return null;
+}
+
+function withDecodedPhotos(recipe) {
+  return {
+    ...recipe,
+    photos: recipe.photos?.map((photo) => {
+      if (photo.id !== undefined) return photo;
+      const contents = Buffer.from(photo.data, 'base64');
+      const type = photoType(contents);
+      if (
+        !type ||
+        contents.length > maxPhotoBytes ||
+        contents.toString('base64') !== photo.data
+      )
+        throw Object.assign(
+          new Error('Upload JPEG, PNG, or WebP photos up to 5 MB each.'),
+          { statusCode: 400 },
+        );
+      return { alt: photo.alt, type, contents };
+    }),
+  };
+}
 
 export function createApp({
   databasePath,
@@ -21,7 +63,7 @@ export function createApp({
   app.addHook('onSend', async (_request, reply, payload) => {
     reply.header(
       'Content-Security-Policy',
-      "default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+      "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
     );
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('Cache-Control', 'no-store');
@@ -107,6 +149,16 @@ export function createApp({
         ),
       );
   });
+  app.get('/recipes/:id/photos/:photoId', async (request, reply) => {
+    const id = Number(request.params.id);
+    const photoId = Number(request.params.photoId);
+    if (Number.isSafeInteger(id) && Number.isSafeInteger(photoId)) {
+      const photo = store.photo(id, photoId);
+      if (photo)
+        return reply.type(photo.type).send(Buffer.from(photo.contents));
+    }
+    return reply.code(404).send({ message: 'Photo not found.' });
+  });
   app.get('/recipes/:id', async (request, reply) => {
     const recipe = find(request, reply);
     if (!recipe) return;
@@ -166,10 +218,10 @@ export function createApp({
   app.get('/api/recipes/:id', async (request, reply) => find(request, reply));
   app.post(
     '/api/recipes',
-    { schema: { body: recipeSchema } },
+    { bodyLimit: recipeBodyLimit, schema: { body: recipeSchema } },
     async (request, reply) => {
       if (!check(request.body, reply)) return;
-      const recipe = store.create(request.body);
+      const recipe = store.create(withDecodedPhotos(request.body));
       return reply
         .code(201)
         .header('Location', `/recipes/${recipe.id}`)
@@ -178,11 +230,11 @@ export function createApp({
   );
   app.put(
     '/api/recipes/:id',
-    { schema: { body: recipeSchema } },
+    { bodyLimit: recipeBodyLimit, schema: { body: recipeSchema } },
     async (request, reply) => {
       const recipe = find(request, reply);
       if (!recipe || !check(request.body, reply, recipe.id)) return;
-      return store.update(recipe.id, request.body);
+      return store.update(recipe.id, withDecodedPhotos(request.body));
     },
   );
   app.delete('/api/recipes/:id', async (request, reply) => {

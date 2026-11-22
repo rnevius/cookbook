@@ -2,8 +2,11 @@ import {
   consolidateIngredients,
   cookingUnits,
   formatNumber,
+  maxPhotoBytes,
+  maxRecipePhotos,
   numericQuantity,
   recipeCategories,
+  recipePhotoTypes,
   scaledAmount,
   scaledYield,
   scalingPercent,
@@ -75,6 +78,19 @@ export function card(
   view = 'procedure',
 ) {
   const ingredientsView = view === 'ingredients';
+  const photos =
+    !ingredientsView && recipe.photos?.length
+      ? `<section data-recipe-photos aria-label="Recipe photos">${recipe.photos
+          .map((photo, index) => {
+            const url = `/recipes/${recipe.id}/photos/${photo.id}`;
+            const alt = escape(photo.alt);
+            const label = alt
+              ? `View full-size photo. ${alt}`
+              : `View full-size photo ${index + 1}`;
+            return `<a href="${url}" aria-label="${label}"><img src="${url}" alt="${alt}"></a>`;
+          })
+          .join('')}</section>`
+      : '';
   const viewInput = ingredientsView
     ? '<input type="hidden" name="view" value="ingredients">'
     : '';
@@ -154,6 +170,7 @@ ${row === 0 ? `<td data-procedure rowspan="${group.ingredients.length}">${steps}
 <section id="scale" aria-label="Recipe scaling"><form method="get" aria-label="Adjust batch size">${viewInput}<label for="factor">Batch size</label><div><input id="factor" name="scale" type="number" min="0.001" max="1000" step="any" value="${scale}"${ingredientsView ? '' : ' aria-describedby="batch-help"'} required><span>×</span><button type="submit">Apply</button></div></form>${ingredientScaling}${ingredientsView ? '' : `<small id="batch-help">1× is the original recipe${recipe.yield ? ` (${escape(recipe.yield)})` : ''}. Cooking times stay as written.</small>`}</section>
 <nav aria-label="Recipe views"><a href="${escape(viewLink('procedure'))}"${!ingredientsView ? ' aria-current="page"' : ''}>Procedure</a><a href="${escape(viewLink('ingredients'))}"${ingredientsView ? ' aria-current="page"' : ''}>Ingredients</a></nav>
 <article><header><h1>${escape(recipe.title)}</h1><p data-yield>${yieldLabel}${ingredientsView ? '' : yieldNote}</p>${!ingredientsView && recipe.attribution ? `<small>${escape(recipe.attribution)}</small>` : ''}</header>
+${photos}
 ${
   ingredientsView
     ? ingredientsList(recipe, scale, components)
@@ -180,6 +197,12 @@ export function editor(recipe, components) {
 <label for="title">Recipe title</label><input id="title" name="title" maxlength="200" required autocomplete="off">
 <label for="yield">Finished yield</label><input id="yield" name="yield" maxlength="200" placeholder="e.g. 750 g / 4 portions">
 </header>
+<fieldset id="photos"><legend>Recipe photos</legend>
+<ul id="photo-list" hidden></ul>
+<label for="photo-files">Add photos</label><input id="photo-files" type="file" accept="${recipePhotoTypes.join(',')}" multiple aria-describedby="photo-help">
+<small id="photo-help">Up to ${maxRecipePhotos} photos. JPEG, PNG, or WebP, ${maxPhotoBytes / (1024 * 1024)} MB each.</small>
+<p id="photo-error" role="alert"></p>
+</fieldset>
 <h2>Cooking stages</h2><div id="groups"></div><button type="button" id="add-group">Add cooking stage</button>
 <label for="reference">100% reference ingredient (optional)</label><select id="reference" name="referenceId"><option value="">No reference ingredient</option></select><small>Choose a positive weight in g, kg, mg, oz, or lb. Decimals and fractions scale; text such as “as needed” stays as written. Put qualifiers such as “or more” in ingredient notes. Keep batch amounts in the ingredient list; quantities in procedure text stay as written.</small>
 <details id="metadata"><summary>Attribution and notes</summary>

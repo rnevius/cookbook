@@ -1,4 +1,9 @@
-import { cookingUnits } from '/recipe.js';
+import {
+  cookingUnits,
+  maxPhotoBytes,
+  maxRecipePhotos,
+  recipePhotoTypes,
+} from '/recipe.js';
 
 const { recipe, components } = JSON.parse(
   document.querySelector('#editor-data').textContent,
@@ -7,6 +12,10 @@ const form = document.querySelector('#editor');
 const container = document.querySelector('#groups');
 const reference = document.querySelector('#reference');
 const error = document.querySelector('#save-error');
+const photoList = document.querySelector('#photo-list');
+const photoFiles = document.querySelector('#photo-files');
+const photoError = document.querySelector('#photo-error');
+const photos = [];
 let dirty = false;
 
 const escape = (value = '') =>
@@ -40,6 +49,75 @@ for (const key of ['title', 'yield', 'attribution', 'notes'])
   form.elements[key].value = recipe?.[key] || '';
 if (recipe?.attribution || recipe?.notes)
   document.querySelector('#metadata').open = true;
+
+function addPhoto({ id, alt = '', file }) {
+  const row = document.createElement('li');
+  row.innerHTML = `<img alt=""><label>Photo description (optional)<input maxlength="200"></label><button type="button">Remove photo</button>`;
+  const preview = row.querySelector('img');
+  const description = row.querySelector('input');
+  const remove = row.querySelector('button');
+  preview.src = file
+    ? URL.createObjectURL(file)
+    : `/recipes/${recipe.id}/photos/${id}`;
+  description.value = alt;
+  const photo = { id, file, preview, description };
+  photos.push(photo);
+  photoList.append(row);
+  photoList.hidden = false;
+  remove.addEventListener('click', () => {
+    photos.splice(photos.indexOf(photo), 1);
+    const nextRow = row.nextElementSibling || row.previousElementSibling;
+    if (file) URL.revokeObjectURL(preview.src);
+    row.remove();
+    photoList.hidden = photos.length === 0;
+    photoError.textContent = '';
+    dirty = true;
+    (nextRow?.querySelector('button') || photoFiles).focus();
+  });
+}
+
+for (const photo of recipe?.photos || []) addPhoto(photo);
+
+photoFiles.addEventListener('change', () => {
+  const files = [...photoFiles.files];
+  photoFiles.value = '';
+  photoError.textContent = '';
+  if (photos.length + files.length > maxRecipePhotos) {
+    photoError.textContent = `A recipe can have up to ${maxRecipePhotos} photos.`;
+    return;
+  }
+  for (const file of files) {
+    if (
+      !file.size ||
+      file.size > maxPhotoBytes ||
+      (file.type && !recipePhotoTypes.includes(file.type))
+    ) {
+      photoError.textContent =
+        document.querySelector('#photo-help').textContent;
+      continue;
+    }
+    addPhoto({ file });
+    dirty = true;
+  }
+});
+
+async function photoData(file, preview) {
+  try {
+    await preview.decode();
+  } catch {
+    throw new Error(
+      `Unable to open “${file.name}” as a photo. Choose a different file.`,
+    );
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener('load', () => resolve(reader.result.split(',')[1]));
+    reader.addEventListener('error', () =>
+      reject(new Error('Unable to read a photo. Select the file again.')),
+    );
+    reader.readAsDataURL(file);
+  });
+}
 
 function readGroups() {
   return [...container.querySelectorAll('[data-group]')].map((element) => ({
@@ -193,12 +271,12 @@ document.querySelector('#add-group').addEventListener('click', () => {
   container.lastElementChild.querySelector('input').focus();
 });
 form.addEventListener('input', (event) => {
-  dirty = true;
+  if (event.target !== photoFiles) dirty = true;
   if (['name', 'quantity', 'unit'].includes(event.target.dataset.field))
     updateReference();
 });
-form.addEventListener('change', () => {
-  dirty = true;
+form.addEventListener('change', (event) => {
+  if (event.target !== photoFiles) dirty = true;
 });
 reference.addEventListener('change', () => {
   referenceId = reference.value || null;
@@ -233,6 +311,14 @@ form.addEventListener('submit', async (event) => {
   const save = form.querySelector('#save');
   save.textContent = 'Saving…';
   try {
+    document.photos = await Promise.all(
+      photos.map(async ({ id, file, preview, description }) => {
+        const alt = description.value.trim();
+        return file
+          ? { alt, data: await photoData(file, preview) }
+          : { id, alt };
+      }),
+    );
     const response = await fetch(
       recipe ? `/api/recipes/${recipe.id}` : '/api/recipes',
       {

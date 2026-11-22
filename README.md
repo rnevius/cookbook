@@ -33,9 +33,13 @@ Add schema changes as new SQL files in `migrations/`; never edit applied migrati
 
 ## Deployment
 
-Configure `deploy/Caddyfile.example` and `.env.deploy` from `.env.deploy.example`.
+1. Point DNS at the server.
+2. Add the [Caddy site block](deploy/Caddyfile.example) to the server's Caddyfile, validate it, and reload Caddy. HTTPS Basic Auth must be working before the first deploy.
+3. Copy [`.env.deploy.example`](.env.deploy.example) to `.env.deploy` and set the SSH host and HTTPS URL.
 
 ```sh
-mise exec -- npm run deploy:setup  # First deployment or service changes
-mise exec -- npm run deploy
+mise exec -- npm run deploy:setup  # First deploy or service changes, via root SSH
+mise exec -- npm run deploy        # Later deploys, via cookbook-deploy SSH
 ```
+
+After setup, authorize your SSH public key for `cookbook-deploy` before running later deploys.

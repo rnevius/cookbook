@@ -1,5 +1,83 @@
 import { test, expect } from '@playwright/test';
 import { seedRecipes } from '../../scripts/seed-data.js';
+import { examplePhoto } from '../fixtures.js';
+
+test('edit recipe photos and open them from a responsive gallery', async ({
+  page,
+}) => {
+  await page.goto('/recipes/new');
+  await page.getByLabel('Recipe title').fill('Photographed toast');
+  await page.getByLabel('Ingredient', { exact: true }).fill('Bread');
+  await page.getByLabel('Step 1', { exact: true }).fill('Toast until golden.');
+  const picker = page.getByLabel('Add photos');
+  const save = page.getByRole('button', { name: 'Save recipe', exact: true });
+  await picker.setInputFiles({
+    name: 'broken.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from('broken photo'),
+  });
+  await save.click();
+  await expect(page.getByRole('alert')).toContainText(
+    'Unable to open “broken.png”',
+  );
+  await page.getByRole('button', { name: 'Remove photo', exact: true }).click();
+  const buffer = Buffer.from(examplePhoto, 'base64');
+  await picker.setInputFiles(
+    ['toast.png', 'plate.png', 'crumb.png', 'slice.png'].map((name) => ({
+      name,
+      mimeType: 'image/png',
+      buffer,
+    })),
+  );
+  const previews = page.locator('#photo-list img');
+  await expect(previews).toHaveCount(4);
+  await expect(previews.first()).toHaveJSProperty('naturalWidth', 2);
+  const descriptions = page.getByLabel('Photo description (optional)');
+  await descriptions.first().fill('Golden toast');
+  await descriptions.last().fill('Sliced toast');
+  await save.click();
+  await expect(page).toHaveURL(/\/recipes\/\d+$/);
+  const gallery = page.getByRole('region', { name: 'Recipe photos' });
+  const photos = gallery.locator('img');
+  await expect(photos).toHaveCount(4);
+  await expect(photos.first()).toHaveAttribute('alt', 'Golden toast');
+  await expect(photos.last()).toHaveAttribute('alt', 'Sliced toast');
+  await expect(photos.last()).toHaveJSProperty('naturalWidth', 2);
+  await expect(photos.first()).toHaveCSS('object-fit', 'contain');
+  const removedPhoto = await photos.first().getAttribute('src');
+  const photoRows = () =>
+    photos.evaluateAll((images) =>
+      images.map((image) => image.getBoundingClientRect().top),
+    );
+  expect(new Set(await photoRows()).size).toBe(1);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const [firstRow, secondPhoto, secondRow, fourthPhoto] = await photoRows();
+  expect(secondPhoto).toBe(firstRow);
+  expect(secondRow).toBeGreaterThan(firstRow);
+  expect(fourthPhoto).toBe(secondRow);
+  const { x, width } = await photos.last().boundingBox();
+  expect(x + width).toBeLessThan(390);
+  await page
+    .getByRole('link', { name: 'View full-size photo. Golden toast' })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`${removedPhoto}$`));
+  await page.goBack();
+  await page.getByRole('link', { name: 'Edit recipe', exact: true }).click();
+  await expect(descriptions.last()).toHaveValue('Sliced toast');
+  await page
+    .getByRole('button', { name: 'Remove photo', exact: true })
+    .first()
+    .click();
+  await descriptions.last().fill('Toast with butter');
+  await save.click();
+  await expect(photos).toHaveCount(3);
+  await expect(photos.last()).toHaveAttribute('alt', 'Toast with butter');
+  expect((await page.request.get(removedPhoto)).status()).toBe(404);
+  await page.emulateMedia({ media: 'print' });
+  await expect(photos.first()).toBeVisible();
+  expect(new Set(await photoRows()).size).toBe(1);
+});
 
 test('author, reorder, scale, edit, and delete a recipe', async ({
   page,

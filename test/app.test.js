@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApp } from '../src/app.js';
-import { exampleRecipe } from './fixtures.js';
+import { examplePhoto, exampleRecipe } from './fixtures.js';
 
 async function setup(t) {
   const app = createApp({ databasePath: ':memory:' });
@@ -25,15 +25,35 @@ test('CRUD preserves stage, ingredient, and step order across database reopen an
   });
   const input = exampleRecipe();
   input.categories = ['Bread', 'Fermentations'];
-  const response = await create(app, input);
+  const alt = 'Sauce with <herbs> & lemon';
+  const response = await create(app, {
+    ...input,
+    photos: [{ data: examplePhoto, alt }],
+  });
   assert.equal(response.statusCode, 201);
-  const { id } = response.json();
+  const { id, photos } = response.json();
+  const [photo] = photos;
+  const photoUrl = `/recipes/${id}/photos/${photo.id}`;
+  assert.deepEqual(photo, { id: photo.id, alt });
   assert.equal(response.headers.location, `/recipes/${id}`);
   await app.close();
   app = createApp({ databasePath });
   const saved = (await app.inject(`/api/recipes/${id}`)).json();
   for (const key of Object.keys(input))
     assert.deepEqual(saved[key], input[key]);
+  assert.deepEqual(saved.photos, photos);
+  const image = await app.inject(photoUrl);
+  assert.equal(image.statusCode, 200);
+  assert.equal(image.headers['content-type'], 'image/png');
+  assert.deepEqual(image.rawPayload, Buffer.from(examplePhoto, 'base64'));
+  assert.match(
+    (await app.inject(`/recipes/${id}?scale=2`)).body,
+    /alt="Sauce with &lt;herbs&gt; &amp; lemon"/,
+  );
+  assert.doesNotMatch(
+    (await app.inject(`/recipes/${id}/edit`)).body,
+    new RegExp(examplePhoto),
+  );
   const changed = structuredClone(input);
   changed.title = 'Updated sauce';
   changed.categories = [];
@@ -48,6 +68,7 @@ test('CRUD preserves stage, ingredient, and step order across database reopen an
   assert.equal(update.statusCode, 200);
   assert.deepEqual(update.json().groups, changed.groups);
   assert.deepEqual(update.json().categories, []);
+  assert.deepEqual(update.json().photos, photos);
   assert.equal(
     (await app.inject('/api/recipes')).json()[0].title,
     changed.title,
@@ -59,6 +80,46 @@ test('CRUD preserves stage, ingredient, and step order across database reopen an
   );
   assert.equal((await app.inject(`/api/recipes/${id}`)).statusCode, 404);
   assert.equal((await app.inject(`/recipes/${id}`)).statusCode, 404);
+  assert.equal((await app.inject(photoUrl)).statusCode, 404);
+});
+
+test('invalid photo edits leave the recipe and existing photos intact', async (t) => {
+  const app = await setup(t);
+  const input = exampleRecipe();
+  const { id, photos } = (
+    await create(app, {
+      ...input,
+      photos: [{ data: examplePhoto, alt: 'Finished sauce' }],
+    })
+  ).json();
+  const [photo] = photos;
+  const other = (await create(app)).json();
+  assert.deepEqual(other.photos, []);
+  assert.equal(
+    (await app.inject(`/recipes/${other.id}/photos/${photo.id}`)).statusCode,
+    404,
+  );
+  const put = (id, photos) =>
+    app.inject({
+      method: 'PUT',
+      url: `/api/recipes/${id}`,
+      payload: { ...input, title: 'Changed title', photos },
+    });
+  for (const [recipeId, changes] of [
+    [other.id, [{ id: photo.id }]],
+    [id, [{ id: photo.id, alt: 'Changed description' }, photo]],
+    [id, [{ data: Buffer.from('<svg/>').toString('base64') }]],
+    [id, Array.from({ length: 5 }, () => ({ data: examplePhoto }))],
+  ]) {
+    assert.equal((await put(recipeId, changes)).statusCode, 400);
+  }
+  const saved = (await app.inject(`/api/recipes/${id}`)).json();
+  assert.equal(saved.title, input.title);
+  assert.deepEqual(saved.photos, photos);
+  assert.equal(
+    (await app.inject(`/api/recipes/${other.id}`)).json().title,
+    input.title,
+  );
 });
 
 test('cards align group ingredients and steps, calculate ratios, scale numeric quantities, and escape text', async (t) => {

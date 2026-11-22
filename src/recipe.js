@@ -1,6 +1,11 @@
 const shortText = { type: 'string', maxLength: 200 };
 const longText = { type: 'string', maxLength: 10000 };
 
+export const maxRecipePhotos = 4;
+export const maxPhotoBytes = 5 * 1024 * 1024;
+export const maxPhotoDataLength = 4 * Math.ceil(maxPhotoBytes / 3);
+export const recipePhotoTypes = ['image/jpeg', 'image/png', 'image/webp'];
+
 export const recipeCategories = [
   'Mains',
   'Sides',
@@ -34,6 +39,33 @@ export const recipeSchema = {
     yield: shortText,
     attribution: shortText,
     notes: longText,
+    photos: {
+      type: 'array',
+      maxItems: maxRecipePhotos,
+      items: {
+        anyOf: [
+          {
+            type: 'object',
+            additionalProperties: false,
+            required: ['id'],
+            properties: { id: { type: 'integer', minimum: 1 }, alt: shortText },
+          },
+          {
+            type: 'object',
+            additionalProperties: false,
+            required: ['data'],
+            properties: {
+              data: {
+                type: 'string',
+                minLength: 1,
+                maxLength: maxPhotoDataLength,
+              },
+              alt: shortText,
+            },
+          },
+        ],
+      },
+    },
     categories: {
       type: 'array',
       items: { type: 'string', enum: recipeCategories },
