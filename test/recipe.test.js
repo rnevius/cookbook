@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  consolidateIngredients,
   grams,
   numericQuantity,
   scaledAmount,
@@ -8,6 +9,100 @@ import {
   scaledYield,
   scalingPercent,
 } from '../src/recipe.js';
+import { seedRecipes } from '../scripts/seed-data.js';
+
+const consolidatedAmounts = (item, scale = 1) =>
+  item.amounts
+    .map(({ quantity, unit }) => scaledAmount(quantity, unit, scale))
+    .join(' + ');
+
+test('consolidation totals Arancini cheese and keeps butter weight and volume separate', () => {
+  const recipe = seedRecipes.find((recipe) => recipe.title === 'Arancini');
+  const before = structuredClone(recipe);
+  const ingredients = consolidateIngredients(recipe);
+  const cheese = ingredients.filter((item) => item.name === 'Caciocavallo');
+  assert.equal(cheese.length, 1);
+  assert.equal(consolidatedAmounts(cheese[0]), '200 g');
+  assert.equal(consolidatedAmounts(cheese[0], 2), '400 g');
+  assert.deepEqual(cheese[0].notes, [
+    {
+      stage: 'Finish the filling',
+      text: 'Grated; aged provolone may be substituted',
+    },
+    {
+      stage: 'Assemble',
+      text: 'Cut into 1–2 cm cubes; or aged provolone',
+    },
+  ]);
+  const butter = ingredients.find((item) => item.name === 'Butter');
+  assert.equal(consolidatedAmounts(butter), '185 g + 1 1/2 tsp');
+  assert.equal(consolidatedAmounts(butter, 2), '370 g + 1 tbsp');
+  assert.deepEqual(recipe, before);
+});
+
+test('consolidation matches names across stages and adds compatible units exactly', () => {
+  const ingredient = (name, quantity, unit) => ({ name, quantity, unit });
+  const ingredients = consolidateIngredients({
+    groups: [
+      {
+        ingredients: [
+          ingredient(' White  sugar ', '0.1', 'kg'),
+          ingredient('Milk', '0.5', 'L'),
+          ingredient('Olive oil', '1/3', 'cup'),
+          ingredient('Spice', '0.1', 'g'),
+          ingredient('Pork', '1', 'lb'),
+        ],
+      },
+      {
+        ingredients: [
+          ingredient('white sugar', '50', 'G'),
+          ingredient('milk', '250', 'ml'),
+          ingredient('Olive oil', '2', 'tbsp'),
+          ingredient('Spice', '0.2', 'g'),
+          ingredient('Pork', '16', 'oz'),
+        ],
+      },
+    ],
+  });
+  assert.equal(ingredients.length, 5);
+  assert.deepEqual(
+    ingredients.map((item) => consolidatedAmounts(item)),
+    ['150 g', '750 ml', '7 tbsp + 1 tsp', '300 mg', '907.18474 g'],
+  );
+});
+
+test('consolidation retains qualitative amounts, unknown units, and distinct component links', () => {
+  const ingredients = consolidateIngredients({
+    groups: [
+      {
+        ingredients: [
+          { name: 'Salt', quantity: '2', unit: 'g' },
+          { name: 'salt', quantity: 'to taste', unit: '' },
+          { name: 'Salt', quantity: 'to taste', unit: '' },
+          { name: 'Salt', quantity: 'a little more', unit: '' },
+          { name: 'Salt', quantity: '1/0', unit: '' },
+          { name: 'Garlic', quantity: '2', unit: 'clove' },
+          { name: 'Garlic', quantity: '1', unit: 'CLOVE' },
+          { name: 'Garlic', quantity: '20', unit: 'g' },
+          { name: 'Sauce', quantity: '100', unit: 'g', componentId: 1 },
+          { name: 'Sauce', quantity: '200', unit: 'g', componentId: 2 },
+          { name: 'Sauce', quantity: '50', unit: 'g', componentId: null },
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(
+    ingredients.map((item) => consolidatedAmounts(item)),
+    [
+      '2 g + to taste + a little more + 1/0',
+      '3 clove + 20 g',
+      '100 g',
+      '200 g',
+      '50 g',
+    ],
+  );
+  assert.deepEqual(consolidateIngredients({ groups: [] }), []);
+});
 
 test('ratios convert mass units and preserve a reference whose percentages exceed 100%', () => {
   const reference = { quantity: '250', unit: 'g' };

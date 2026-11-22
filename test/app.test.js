@@ -122,6 +122,71 @@ test('cards scale fractional yields and ingredients while preserving authored qu
   assert.deepEqual(saved.groups, input.groups);
 });
 
+test('ingredients view shows names and totals and preserves batch and reference scaling', async (t) => {
+  const app = await setup(t);
+  const input = exampleRecipe();
+  input.groups[0].ingredients.push({
+    ...input.groups[1].ingredients[0],
+    id: 'extra-butter',
+    name: ' butter ',
+    quantity: '50',
+    notes: '<b>Cold & cubed</b>',
+  });
+  input.groups[0].title = 'Reduce <slowly>';
+  const { id } = (await create(app, input)).json();
+  const response = await app.inject(`/recipes/${id}?view=ingredients&scale=2`);
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /aria-label="Consolidated ingredients"/);
+  assert.match(response.body, /<li>500 g butter<\/li>/);
+  assert.doesNotMatch(response.body, /<table|<thead/);
+  assert.doesNotMatch(response.body, /Cold|Serve warm|Kitchen notebook/);
+  assert.match(response.body, /name="view" value="ingredients"/);
+  assert.match(response.body, new RegExp(`href="/recipes/${id}\\?scale=2"`));
+  assert.doesNotMatch(response.body, /data-procedure|<b>Cold/);
+  const targeted = await app.inject(
+    `/recipes/${id}?view=ingredients&ingredientAmount=0.6&ingredientUnit=kg`,
+  );
+  assert.equal(targeted.statusCode, 200);
+  assert.match(targeted.body, /<li>750 g butter<\/li>/);
+  assert.match(targeted.body, /Yields 825 g/);
+  assert.match(
+    targeted.body,
+    new RegExp(
+      `href="/recipes/${id}\\?ingredientAmount=0.6&amp;ingredientUnit=kg"`,
+    ),
+  );
+  const saved = (await app.inject(`/api/recipes/${id}`)).json();
+  assert.deepEqual(saved.groups, input.groups);
+  assert.equal(
+    (await app.inject('/recipes/999?view=ingredients')).statusCode,
+    404,
+  );
+  assert.equal(
+    (await app.inject(`/recipes/${id}?view=ingredients&scale=0`)).statusCode,
+    400,
+  );
+});
+
+test('ingredients view supports empty lists and links component recipes', async (t) => {
+  const app = await setup(t);
+  const component = (await create(app)).json();
+  const input = exampleRecipe();
+  input.groups[0].ingredients[0].componentId = component.id;
+  const { id } = (await create(app, input)).json();
+  const linked = await app.inject(`/recipes/${id}?view=ingredients`);
+  assert.match(
+    linked.body,
+    new RegExp(`href="/recipes/${component.id}">White wine`),
+  );
+  for (const group of input.groups) group.ingredients = [];
+  input.referenceId = null;
+  const empty = (await create(app, input)).json();
+  assert.match(
+    (await app.inject(`/recipes/${empty.id}?view=ingredients`)).body,
+    /No ingredients listed/,
+  );
+});
+
 test('cards display practical cup measures without changing the saved recipe', async (t) => {
   const app = await setup(t);
   const input = exampleRecipe();

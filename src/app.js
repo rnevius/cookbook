@@ -151,7 +151,16 @@ export function createApp({
           'The quantity multiplier must be between 0.001 and 1000.',
         ),
       );
-    return html(reply, card(recipe, scale, store.list(), ingredientTarget));
+    return html(
+      reply,
+      card(
+        recipe,
+        scale,
+        store.list(),
+        ingredientTarget,
+        request.query.view === 'ingredients' ? 'ingredients' : 'procedure',
+      ),
+    );
   });
   app.get('/api/recipes', async () => store.list());
   app.get('/api/recipes/:id', async (request, reply) => find(request, reply));

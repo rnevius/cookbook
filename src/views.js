@@ -1,4 +1,5 @@
 import {
+  consolidateIngredients,
   cookingUnits,
   formatNumber,
   numericQuantity,
@@ -42,7 +43,50 @@ function procedure(value) {
   );
 }
 
-export function card(recipe, scale, components, ingredientTarget) {
+function ingredientsList(recipe, scale, components) {
+  const ingredients = consolidateIngredients(recipe);
+  return ingredients.length
+    ? `<ul aria-label="Consolidated ingredients" data-ingredients>${ingredients
+        .map((item) => {
+          const component = components.find(
+            (recipe) => recipe.id === item.componentId,
+          );
+          const amounts = item.amounts
+            .map((amount) => scaledAmount(amount.quantity, amount.unit, scale))
+            .filter(Boolean);
+          const name = component
+            ? `<a href="/recipes/${component.id}">${escape(item.name)}</a>`
+            : escape(item.name);
+          const amount = escape(amounts.join(' + '));
+          const qualitative = item.amounts.every(
+            (amount) => numericQuantity(amount.quantity) === null,
+          );
+          return `<li>${qualitative ? `${name}${amount ? ` (${amount})` : ''}` : `${amount} ${name}`}</li>`;
+        })
+        .join('')}</ul>`
+    : '<p>No ingredients listed.</p>';
+}
+
+export function card(
+  recipe,
+  scale,
+  components,
+  ingredientTarget,
+  view = 'procedure',
+) {
+  const ingredientsView = view === 'ingredients';
+  const viewInput = ingredientsView
+    ? '<input type="hidden" name="view" value="ingredients">'
+    : '';
+  const viewLink = (target) => {
+    const query = new URLSearchParams();
+    if (target === 'ingredients') query.set('view', target);
+    if (ingredientTarget) {
+      query.set('ingredientAmount', ingredientTarget.quantity);
+      query.set('ingredientUnit', ingredientTarget.unit);
+    } else if (scale !== 1) query.set('scale', scale);
+    return `/recipes/${recipe.id}${query.size ? `?${query}` : ''}`;
+  };
   const yieldValue = scaledYield(recipe.yield, scale);
   const yieldLabel = yieldValue
     ? `Yields ${escape(yieldValue)}`
@@ -72,7 +116,7 @@ export function card(recipe, scale, components, ingredientTarget) {
   const targetUnit =
     ingredientTarget?.unit ?? reference?.unit.trim().toLowerCase();
   const ingredientScaling = reference
-    ? `<form method="get" aria-label="Scale by primary ingredient"><label for="ingredient-amount">${escape(reference.name)} amount</label><div><input id="ingredient-amount" name="ingredientAmount" type="number" min="0.000001" step="any" value="${escape(targetQuantity)}" required><select name="ingredientUnit" aria-label="Ingredient weight unit">${cookingUnits[0].units.map((unit) => `<option value="${unit}"${unit === targetUnit ? ' selected' : ''}>${unit}</option>`).join('')}</select><button type="submit">Scale by ingredient</button></div></form>`
+    ? `<form method="get" aria-label="Scale by primary ingredient">${viewInput}<label for="ingredient-amount">${escape(reference.name)} amount</label><div><input id="ingredient-amount" name="ingredientAmount" type="number" min="0.000001" step="any" value="${escape(targetQuantity)}" required><select name="ingredientUnit" aria-label="Ingredient weight unit">${cookingUnits[0].units.map((unit) => `<option value="${unit}"${unit === targetUnit ? ' selected' : ''}>${unit}</option>`).join('')}</select><button type="submit">Scale by ingredient</button></div></form>`
     : '';
   let stepNumber = 1;
   const groups = recipe.groups
@@ -107,12 +151,17 @@ ${row === 0 ? `<td data-procedure rowspan="${group.ingredients.length}">${steps}
   return layout(
     recipe.title,
     `<nav aria-label="Recipe actions"><a href="/">All recipes</a><span><a href="/recipes/${recipe.id}/edit">Edit recipe</a> <button type="button" id="print">Print / PDF</button></span></nav>
-<section id="scale" aria-label="Recipe scaling"><form method="get" aria-label="Adjust batch size"><label for="factor">Batch size</label><div><input id="factor" name="scale" type="number" min="0.001" max="1000" step="any" value="${scale}" aria-describedby="batch-help" required><span>×</span><button type="submit">Apply</button></div></form>${ingredientScaling}<small id="batch-help">1× is the original recipe${recipe.yield ? ` (${escape(recipe.yield)})` : ''}. Cooking times stay as written.</small></section>
-<article><header><h1>${escape(recipe.title)}</h1><p data-yield>${yieldLabel}${yieldNote}</p>${recipe.attribution ? `<small>${escape(recipe.attribution)}</small>` : ''}</header>
-<div role="region" aria-label="Recipe procedure" tabindex="0"><table data-scaling="${showScaling}"><colgroup><col data-column="ingredient"><col data-column="quantity">${showScaling ? '<col data-column="scaling">' : ''}<col data-column="procedure"></colgroup><thead><tr><th scope="col">Ingredient</th><th scope="col">Quantity</th>${showScaling ? '<th scope="col">Scaling</th>' : ''}<th scope="col">Procedure</th></tr></thead>${groups}</table></div>
+<section id="scale" aria-label="Recipe scaling"><form method="get" aria-label="Adjust batch size">${viewInput}<label for="factor">Batch size</label><div><input id="factor" name="scale" type="number" min="0.001" max="1000" step="any" value="${scale}"${ingredientsView ? '' : ' aria-describedby="batch-help"'} required><span>×</span><button type="submit">Apply</button></div></form>${ingredientScaling}${ingredientsView ? '' : `<small id="batch-help">1× is the original recipe${recipe.yield ? ` (${escape(recipe.yield)})` : ''}. Cooking times stay as written.</small>`}</section>
+<nav aria-label="Recipe views"><a href="${escape(viewLink('procedure'))}"${!ingredientsView ? ' aria-current="page"' : ''}>Procedure</a><a href="${escape(viewLink('ingredients'))}"${ingredientsView ? ' aria-current="page"' : ''}>Ingredients</a></nav>
+<article><header><h1>${escape(recipe.title)}</h1><p data-yield>${yieldLabel}${ingredientsView ? '' : yieldNote}</p>${!ingredientsView && recipe.attribution ? `<small>${escape(recipe.attribution)}</small>` : ''}</header>
+${
+  ingredientsView
+    ? ingredientsList(recipe, scale, components)
+    : `<div role="region" aria-label="Recipe procedure" tabindex="0"><table data-scaling="${showScaling}"><colgroup><col data-column="ingredient"><col data-column="quantity">${showScaling ? '<col data-column="scaling">' : ''}<col data-column="procedure"></colgroup><thead><tr><th scope="col">Ingredient</th><th scope="col">Quantity</th>${showScaling ? '<th scope="col">Scaling</th>' : ''}<th scope="col">Procedure</th></tr></thead>${groups}</table></div>
 ${reference ? `<p><small>100% = ${escape(reference.name)}.</small></p>` : ''}
-${specialNotes.length ? `<aside><h2>Special scaling</h2><ul>${specialNotes.join('')}</ul><small>* These ratios use the stated basis rather than the 100% reference ingredient.</small></aside>` : ''}
-${recipe.notes ? `<section><h2>Notes</h2><p data-multiline>${escape(recipe.notes)}</p></section>` : ''}
+${specialNotes.length ? `<aside><h2>Special scaling</h2><ul>${specialNotes.join('')}</ul><small>* These ratios use the stated basis rather than the 100% reference ingredient.</small></aside>` : ''}`
+}
+${!ingredientsView && recipe.notes ? `<section><h2>Notes</h2><p data-multiline>${escape(recipe.notes)}</p></section>` : ''}
 </article>
 <details id="delete-panel"><summary>Delete recipe</summary><p>This permanently deletes this recipe from your notebook.</p><button type="button" id="delete" data-id="${recipe.id}">Confirm deletion</button><p id="delete-error" role="alert"></p></details>`,
     'card',

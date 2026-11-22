@@ -57,6 +57,14 @@ nav span {
   align-items: center;
   gap: 1rem;
 }
+nav[aria-label='Recipe views'] {
+  justify-content: flex-start;
+  gap: 1.25rem;
+}
+nav a[aria-current='page'] {
+  font-weight: 600;
+  text-decoration-thickness: 2px;
+}
 label {
   display: block;
   font-size: 0.75rem;
@@ -246,6 +254,16 @@ article table[data-scaling='true'] tbody th + td + td {
 table small {
   display: block;
   font-size: 0.7rem;
+}
+[data-ingredients] {
+  margin: 0.75rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 0.85rem;
+}
+[data-ingredients] li {
+  margin: 0.25rem 0;
+  overflow-wrap: anywhere;
+  break-inside: avoid;
 }
 article table ol {
   margin: 0;

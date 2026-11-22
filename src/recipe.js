@@ -291,6 +291,90 @@ export function scaledAmount(quantity, unit, scale = 1) {
   return `${scaledQuantity(quantity, scale)}${unit ? ` ${unit}` : ''}`;
 }
 
+// Combine explicit measurements only; weight and volume need separate totals.
+export function consolidateIngredients(recipe) {
+  const measures = {
+    mg: ['g', '0.001'],
+    g: ['g', '1'],
+    gram: ['g', '1'],
+    grams: ['g', '1'],
+    kg: ['g', '1000'],
+    oz: ['g', '28.349523125'],
+    lb: ['g', '453.59237'],
+    ml: ['ml', '1'],
+    l: ['ml', '1000'],
+    litre: ['ml', '1000'],
+    litres: ['ml', '1000'],
+    liter: ['ml', '1000'],
+    liters: ['ml', '1000'],
+    tsp: ['tsp', '1'],
+    tbsp: ['tsp', '3'],
+    cup: ['tsp', '48'],
+    cups: ['tsp', '48'],
+  };
+  const normalize = (value) => value.trim().replace(/\s+/g, ' ').toLowerCase();
+  const totals = new Map();
+  for (const [index, group] of recipe.groups.entries()) {
+    for (const ingredient of group.ingredients) {
+      const key = JSON.stringify([
+        normalize(ingredient.name),
+        ingredient.componentId ?? null,
+      ]);
+      if (!totals.has(key)) {
+        totals.set(key, {
+          name: ingredient.name.trim(),
+          componentId: ingredient.componentId ?? null,
+          amounts: new Map(),
+          notes: [],
+        });
+      }
+      const total = totals.get(key);
+      if (ingredient.notes?.trim()) {
+        total.notes.push({
+          stage: group.title || `Stage ${index + 1}`,
+          text: ingredient.notes.trim(),
+        });
+      }
+      const unit = normalize(ingredient.unit);
+      if (numericQuantity(ingredient.quantity) === null) {
+        const amountKey = JSON.stringify([
+          unit,
+          normalize(ingredient.quantity),
+        ]);
+        total.amounts.set(amountKey, {
+          quantity: ingredient.quantity.trim(),
+          unit: ingredient.unit.trim(),
+        });
+        continue;
+      }
+      const [baseUnit, factor] = Object.hasOwn(measures, unit)
+        ? measures[unit]
+        : [unit, '1'];
+      const amount = multiplyRatio(
+        quantityRatio(ingredient.quantity),
+        quantityRatio(factor),
+      );
+      const previous = total.amounts.get(baseUnit)?.ratio || [0n, 1n];
+      const sum = ratio(
+        previous[0] * amount[1] + amount[0] * previous[1],
+        previous[1] * amount[1],
+      );
+      total.amounts.set(baseUnit, {
+        quantity: `${sum[0]}/${sum[1]}`,
+        unit: baseUnit,
+        ratio: sum,
+      });
+    }
+  }
+  return [...totals.values()].map((total) => ({
+    ...total,
+    amounts: [...total.amounts.values()].map(({ quantity, unit }) => ({
+      quantity,
+      unit,
+    })),
+  }));
+}
+
 // Only scale complete quantity/unit expressions, never dimensions or prose.
 export function scaledYield(value, scale = 1) {
   if (!value.trim()) return null;

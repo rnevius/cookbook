@@ -272,3 +272,98 @@ test('invalid scaling retains the draft and can be corrected', async ({
     page.getByText('Gelatin: 1.6% of total liquid weight.'),
   ).toBeVisible();
 });
+
+test('consolidated ingredients combine repeated items and retain scaling across views', async ({
+  page,
+}, testInfo) => {
+  const source = structuredClone(
+    seedRecipes.find((recipe) => recipe.title === 'Arancini'),
+  );
+  source.referenceId = 'rice-grains';
+  const response = await page.request.post('/api/recipes', { data: source });
+  expect(response.status()).toBe(201);
+  const { id } = await response.json();
+  await page.goto(`/recipes/${id}`);
+  await page.getByRole('link', { name: 'Ingredients', exact: true }).click();
+  const ingredients = page.getByRole('list', {
+    name: 'Consolidated ingredients',
+  });
+  const cheese = ingredients
+    .getByRole('listitem')
+    .filter({ hasText: 'Caciocavallo' });
+  const butter = ingredients
+    .getByRole('listitem')
+    .filter({ hasText: 'Butter' });
+  await expect(cheese).toHaveCount(1);
+  await expect(cheese).toHaveText('200 g Caciocavallo');
+  await expect(ingredients.getByRole('listitem').first()).toHaveText(
+    '1 kg Rice',
+  );
+  await expect(
+    ingredients.getByRole('listitem').filter({ hasText: 'Olive oil' }),
+  ).toHaveText('2 tbsp Olive oil');
+  await expect(butter).toHaveCount(1);
+  await expect(butter).toHaveText('185 g + 1 1/2 tsp Butter');
+  await expect(
+    ingredients.getByRole('listitem').filter({ hasText: 'Saffron' }),
+  ).toHaveText('Saffron (as needed)');
+  await expect(page.getByRole('table')).toHaveCount(0);
+  await expect(page.locator('article small, article h2')).toHaveCount(0);
+  await page.getByLabel('Batch size', { exact: true }).fill('2');
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(ingredients).toBeVisible();
+  await expect(cheese).toHaveText('400 g Caciocavallo');
+  await expect(butter).toHaveText('370 g + 1 tbsp Butter');
+  await expect(page.locator('[data-yield]')).toContainText('64 arancini');
+  await page.getByLabel('Rice amount', { exact: true }).fill('3');
+  await page.getByLabel('Ingredient weight unit').selectOption('kg');
+  await page
+    .getByRole('button', { name: 'Scale by ingredient', exact: true })
+    .click();
+  await expect(ingredients).toBeVisible();
+  await expect(cheese).toHaveText('600 g Caciocavallo');
+  await page.getByRole('link', { name: 'Procedure', exact: true }).click();
+  await expect(page.getByLabel('Batch size', { exact: true })).toHaveValue('3');
+  await expect(page.getByLabel('Rice amount', { exact: true })).toHaveValue(
+    '3',
+  );
+  await expect(page.getByLabel('Ingredient weight unit')).toHaveValue('kg');
+  await expect(
+    page.getByRole('region', { name: 'Recipe procedure' }),
+  ).toBeVisible();
+  await expect(
+    page.locator('[data-ingredient-note]').filter({ hasText: 'Grated;' }),
+  ).toContainText('Grated; aged provolone');
+  await expect(
+    page.getByRole('heading', { name: 'Notes', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('link', { name: 'Ingredients', exact: true }).click();
+  await expect(cheese).toHaveText('600 g Caciocavallo');
+  await page.screenshot({
+    path: testInfo.outputPath('ingredients.png'),
+    fullPage: true,
+  });
+  await page.emulateMedia({ media: 'print' });
+  await expect(
+    page.getByRole('navigation', { name: 'Recipe views' }),
+  ).toBeHidden();
+  await expect(ingredients).toBeVisible();
+  await page.emulateMedia({ media: 'screen' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await ingredients.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+  ).toBe(true);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: testInfo.outputPath('ingredients-mobile.png'),
+    fullPage: true,
+  });
+  const saved = await (await page.request.get(`/api/recipes/${id}`)).json();
+  expect(saved.groups).toEqual(source.groups);
+});
