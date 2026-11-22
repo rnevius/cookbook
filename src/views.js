@@ -37,7 +37,7 @@ ${recipes.length ? `<ul>${recipes.map((recipe) => `<li><a href="/recipes/${recip
 // Emphasize explicit temperatures and durations after escaping authored text.
 function procedure(value) {
   return escape(value).replace(
-    /(?<![\w.])(-?\d+(?:\.\d+)?(?:\s*(?:[–—-]|to)\s*-?\d+(?:\.\d+)?)?\s*(?:°\s*[CF]\b|(?:seconds?|secs?|s|minutes?|mins?|hours?|hrs?|h)\b))/gi,
+    /(?<![\w.])(-?\d+(?:\.\d+)?(?:\s*(?:[–—-]|to)\s*-?\d+(?:\.\d+)?)?\s*(?:[°º]\s*[CF]\b|(?:seconds?|secs?|s|minutes?|mins?|hours?|hrs?|h)\b))/gi,
     '<strong>$1</strong>',
   );
 }
@@ -56,6 +56,13 @@ export function card(recipe, scale, components, ingredientTarget) {
   const reference = recipe.groups
     .flatMap((group) => group.ingredients)
     .find((item) => item.id === recipe.referenceId);
+  const showScaling = Boolean(
+    reference ||
+    recipe.groups.some((group) =>
+      group.ingredients.some((item) => item.specialPercent),
+    ),
+  );
+  const columns = showScaling ? 4 : 3;
   const targetQuantity = reference
     ? (ingredientTarget?.quantity ??
       String(
@@ -71,17 +78,20 @@ export function card(recipe, scale, components, ingredientTarget) {
   const groups = recipe.groups
     .map((group) => {
       const steps = `<ol start="${stepNumber}">${group.steps.map((step) => `<li>${procedure(step)}</li>`).join('')}</ol>`;
+      const heading = group.title
+        ? `<tr data-stage-heading><th scope="rowgroup" colspan="${columns}">${escape(group.title)}</th></tr>`
+        : '';
       stepNumber += group.steps.length;
       if (!group.ingredients.length)
-        return `<tbody aria-label="${escape(group.title || 'Preparation')}"><tr><td colspan="3">—</td><td data-procedure>${steps}</td></tr></tbody>`;
-      return `<tbody aria-label="${escape(group.title || 'Preparation')}">${group.ingredients
+        return `<tbody aria-label="${escape(group.title || 'Preparation')}">${heading}<tr><td colspan="${columns - 1}">—</td><td data-procedure>${steps}</td></tr></tbody>`;
+      return `<tbody aria-label="${escape(group.title || 'Preparation')}">${heading}${group.ingredients
         .map((item, row) => {
           const component = components.find(
             (recipe) => recipe.id === item.componentId,
           );
-          return `<tr><th scope="row">${escape(item.name)}${component ? `<small><a href="/recipes/${component.id}">Component: ${escape(component.title)}</a></small>` : ''}</th>
+          return `<tr><th scope="row">${escape(item.name)}${item.notes ? `<small data-ingredient-note>${escape(item.notes)}</small>` : ''}${component ? `<small><a href="/recipes/${component.id}">Component: ${escape(component.title)}</a></small>` : ''}</th>
 <td>${escape(scaledAmount(item.quantity, item.unit, scale))}</td>
-<td>${scalingPercent(item, reference)}${item.specialPercent ? `<small>(${escape(item.specialPercent)}%*)</small>` : ''}</td>
+${showScaling ? `<td>${scalingPercent(item, reference)}${item.specialPercent ? `<small>(${escape(item.specialPercent)}%*)</small>` : ''}</td>` : ''}
 ${row === 0 ? `<td data-procedure rowspan="${group.ingredients.length}">${steps}</td>` : ''}</tr>`;
         })
         .join('')}</tbody>`;
@@ -99,7 +109,7 @@ ${row === 0 ? `<td data-procedure rowspan="${group.ingredients.length}">${steps}
     `<nav aria-label="Recipe actions"><a href="/">All recipes</a><span><a href="/recipes/${recipe.id}/edit">Edit recipe</a> <button type="button" id="print">Print / PDF</button></span></nav>
 <section id="scale" aria-label="Recipe scaling"><form method="get" aria-label="Adjust batch size"><label for="factor">Batch size</label><div><input id="factor" name="scale" type="number" min="0.001" max="1000" step="any" value="${scale}" aria-describedby="batch-help" required><span>×</span><button type="submit">Apply</button></div></form>${ingredientScaling}<small id="batch-help">1× is the original recipe${recipe.yield ? ` (${escape(recipe.yield)})` : ''}. Cooking times stay as written.</small></section>
 <article><header><h1>${escape(recipe.title)}</h1><p data-yield>${yieldLabel}${yieldNote}</p>${recipe.attribution ? `<small>${escape(recipe.attribution)}</small>` : ''}</header>
-<div role="region" aria-label="Recipe procedure" tabindex="0"><table><thead><tr><th scope="col">Ingredient</th><th scope="col">Quantity</th><th scope="col">Scaling</th><th scope="col">Procedure</th></tr></thead>${groups}</table></div>
+<div role="region" aria-label="Recipe procedure" tabindex="0"><table data-scaling="${showScaling}"><colgroup><col data-column="ingredient"><col data-column="quantity">${showScaling ? '<col data-column="scaling">' : ''}<col data-column="procedure"></colgroup><thead><tr><th scope="col">Ingredient</th><th scope="col">Quantity</th>${showScaling ? '<th scope="col">Scaling</th>' : ''}<th scope="col">Procedure</th></tr></thead>${groups}</table></div>
 ${reference ? `<p><small>100% = ${escape(reference.name)}.</small></p>` : ''}
 ${specialNotes.length ? `<aside><h2>Special scaling</h2><ul>${specialNotes.join('')}</ul><small>* These ratios use the stated basis rather than the 100% reference ingredient.</small></aside>` : ''}
 ${recipe.notes ? `<section><h2>Notes</h2><p data-multiline>${escape(recipe.notes)}</p></section>` : ''}
@@ -122,7 +132,7 @@ export function editor(recipe, components) {
 <label for="yield">Finished yield</label><input id="yield" name="yield" maxlength="200" placeholder="e.g. 750 g / 4 portions">
 </header>
 <h2>Cooking stages</h2><div id="groups"></div><button type="button" id="add-group">Add cooking stage</button>
-<label for="reference">100% reference ingredient (optional)</label><select id="reference" name="referenceId"><option value="">No reference ingredient</option></select><small>Choose a positive weight in g, kg, mg, oz, or lb. Use decimal quantities for scaling; text such as “as needed” stays as written.</small>
+<label for="reference">100% reference ingredient (optional)</label><select id="reference" name="referenceId"><option value="">No reference ingredient</option></select><small>Choose a positive weight in g, kg, mg, oz, or lb. Decimals and fractions scale; text such as “as needed” stays as written. Put qualifiers such as “or more” in ingredient notes. Keep batch amounts in the ingredient list; quantities in procedure text stay as written.</small>
 <details id="metadata"><summary>Attribution and notes</summary>
 <label for="attribution">Attribution</label><input id="attribution" name="attribution" maxlength="200" placeholder="Inspired by…">
 <label for="notes">Recipe notes</label><textarea id="notes" name="notes" rows="3" maxlength="10000"></textarea></details>

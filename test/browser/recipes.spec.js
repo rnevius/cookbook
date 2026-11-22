@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { seedRecipes } from '../../scripts/seed-data.js';
 
 test('author, reorder, scale, edit, and delete a recipe', async ({
   page,
@@ -19,6 +20,10 @@ test('author, reorder, scale, edit, and delete a recipe', async ({
   let item = stage.locator('[data-ingredient]').first();
   await item.getByLabel('Ingredient', { exact: true }).fill('Butter');
   await item.getByLabel('Quantity', { exact: true }).fill('200');
+  await item.getByText('Options', { exact: true }).click();
+  await item
+    .getByLabel('Ingredient notes', { exact: true })
+    .fill('Unsalted, cubed');
   await stage
     .getByLabel('Step 1', { exact: true })
     .fill('Heat at 150 °C for 5–6 minutes until golden.');
@@ -68,6 +73,13 @@ test('author, reorder, scale, edit, and delete a recipe', async ({
   ).toBeVisible();
   await expect(page.getByText('20%', { exact: true })).toBeVisible();
   await expect(page.getByText('100%', { exact: true })).toBeVisible();
+  await expect(page.locator('[data-ingredient-note]')).toHaveText(
+    'Unsalted, cubed',
+  );
+  await expect(page.locator('[data-stage-heading]')).toHaveText([
+    'Brown the butter',
+    'Finish',
+  ]);
   await expect(page.locator('table strong')).toHaveText([
     '150 °C',
     '5–6 minutes',
@@ -118,6 +130,9 @@ test('author, reorder, scale, edit, and delete a recipe', async ({
     page.getByLabel('100% reference ingredient (optional)'),
   ).not.toHaveValue('');
   await page.getByLabel('Recipe title').fill('Warm brown butter sauce');
+  await expect(page.getByLabel('Ingredient notes').first()).toHaveValue(
+    'Unsalted, cubed',
+  );
   await expect(
     page.getByRole('checkbox', { name: 'Sides', exact: true }),
   ).toBeChecked();
@@ -142,8 +157,11 @@ test('author, reorder, scale, edit, and delete a recipe', async ({
   const printColumns = await page
     .locator('article table')
     .evaluate((table) => ({
-      heading: table.tHead.rows[0].cells[3].getBoundingClientRect().left,
-      cell: table.tBodies[0].rows[0].cells[3].getBoundingClientRect().left,
+      heading: table
+        .querySelector('thead th:last-child')
+        .getBoundingClientRect().left,
+      cell: table.querySelector('[data-procedure]').getBoundingClientRect()
+        .left,
       step: table.tBodies[0].querySelector('li').getBoundingClientRect().left,
     }));
   expect(Math.abs(printColumns.cell - printColumns.heading)).toBeLessThan(1);
@@ -172,6 +190,64 @@ test('author, reorder, scale, edit, and delete a recipe', async ({
     page.getByRole('link', { name: 'Warm brown butter sauce', exact: true }),
   ).toHaveCount(0);
   expect(errors).toEqual([]);
+});
+
+test('multipart recipe cards retain their layout without a scaling column on screen and in print', async ({
+  page,
+}, testInfo) => {
+  const source = seedRecipes.find((recipe) => recipe.title === 'Arancini');
+  const response = await page.request.post('/api/recipes', { data: source });
+  expect(response.status()).toBe(201);
+  const { id } = await response.json();
+  await page.goto(`/recipes/${id}`);
+  await expect(page.getByRole('columnheader')).toHaveText([
+    'Ingredient',
+    'Quantity',
+    'Procedure',
+  ]);
+  await expect(page.locator('[data-stage-heading]')).toHaveText(
+    source.groups.map((group) => group.title),
+  );
+  await page.getByLabel('Batch size', { exact: true }).fill('2');
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(page.locator('[data-yield]')).toContainText(
+    'Yields 64 arancini',
+  );
+  await expect(
+    page.getByRole('cell', { name: '4 L', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator('[data-ingredient-note]').filter({ hasText: /^Or more$/ }),
+  ).toHaveCount(1);
+  await page.screenshot({
+    path: testInfo.outputPath('arancini.png'),
+    fullPage: true,
+  });
+  await page.emulateMedia({ media: 'print' });
+  const columns = await page.locator('article table').evaluate((table) => ({
+    heading: table.querySelector('thead th:last-child').getBoundingClientRect()
+      .left,
+    cell: table.querySelector('[data-procedure]').getBoundingClientRect().left,
+    alignment: getComputedStyle(table.querySelector('[data-procedure]'))
+      .textAlign,
+  }));
+  expect(Math.abs(columns.cell - columns.heading)).toBeLessThan(1);
+  expect(columns.alignment).toBe('left');
+  await page.screenshot({
+    path: testInfo.outputPath('arancini-print.png'),
+    fullPage: true,
+  });
+  await page.emulateMedia({ media: 'screen' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: testInfo.outputPath('arancini-mobile.png'),
+    fullPage: true,
+  });
 });
 
 test('invalid scaling retains the draft and can be corrected', async ({

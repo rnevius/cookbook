@@ -73,6 +73,7 @@ export const recipeSchema = {
               properties: {
                 id: { type: 'string', minLength: 1, maxLength: 100 },
                 name: { ...shortText, minLength: 1, pattern: '\\S' },
+                notes: shortText,
                 quantity: { type: 'string', maxLength: 80 },
                 unit: { type: 'string', maxLength: 40 },
                 specialPercent: { type: 'string', maxLength: 40 },
@@ -95,10 +96,41 @@ export const recipeSchema = {
   },
 };
 
+function quantityText(value) {
+  const fractions = {
+    '¼': '1/4',
+    '½': '1/2',
+    '¾': '3/4',
+    '⅐': '1/7',
+    '⅑': '1/9',
+    '⅒': '1/10',
+    '⅓': '1/3',
+    '⅔': '2/3',
+    '⅕': '1/5',
+    '⅖': '2/5',
+    '⅗': '3/5',
+    '⅘': '4/5',
+    '⅙': '1/6',
+    '⅚': '5/6',
+    '⅛': '1/8',
+    '⅜': '3/8',
+    '⅝': '5/8',
+    '⅞': '7/8',
+  };
+  return String(value)
+    .trim()
+    .replace(
+      /(\d)?([¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])/g,
+      (_, whole, fraction) =>
+        `${whole ? `${whole} ` : ''}${fractions[fraction]}`,
+    )
+    .replaceAll('⁄', '/');
+}
+
 export function numericQuantity(value) {
   if (typeof value === 'number')
     return Number.isFinite(value) && value >= 0 ? value : null;
-  const text = String(value).trim();
+  const text = quantityText(value);
   if (/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(text)) return Number(text);
   const fraction = text.match(/^(?:(\d+)\s+)?(\d+)\s*\/\s*(\d+)$/);
   if (!fraction || Number(fraction[3]) === 0) return null;
@@ -141,7 +173,7 @@ function ratio(numerator, denominator = 1n) {
 }
 
 function quantityRatio(value) {
-  const text = String(value).trim();
+  const text = quantityText(value);
   const fraction = text.match(/^(?:(\d+)\s+)?(\d+)\s*\/\s*(\d+)$/);
   if (fraction) {
     const denominator = BigInt(fraction[3]);
@@ -281,6 +313,10 @@ export function scaledYield(value, scale = 1) {
     'loaves',
     'roll',
     'rolls',
+    'bagel',
+    'bagels',
+    'arancino',
+    'arancini',
     'cookie',
     'cookies',
     'muffin',
@@ -302,7 +338,7 @@ export function scaledYield(value, scale = 1) {
   );
   // A yield separator follows a unit; slashes between numbers belong to fractions.
   for (const part of value.split(/(?<=[a-z])\s*\/\s*/i)) {
-    const match = part.trim().match(expression);
+    const match = quantityText(part).match(expression);
     if (!match || !units.has(match[5].trim().toLowerCase()))
       return scale === 1 ? value : null;
     const low = match[2].replaceAll(',', '');
@@ -371,7 +407,7 @@ export function validateRecipe(recipe) {
         return 'Special scaling needs a non-negative percentage and an explanation of its basis.';
       }
     }
-    if (/^-(?:\d|\.\d)/.test(ingredient.quantity.trim()))
+    if (/^-(?:\d|\.\d)/.test(quantityText(ingredient.quantity)))
       return 'Ingredient quantities cannot be negative.';
   }
   return null;

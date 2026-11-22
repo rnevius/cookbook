@@ -172,3 +172,21 @@ test('scaling preserves qualitative amounts and enough precision for small addit
   assert.equal(numericQuantity('10 g'), null);
   assert.equal(numericQuantity('.5'), 0.5);
 });
+
+test('Unicode fractions scale like written fractions, including mixed numbers', () => {
+  assert.equal(scaledAmount('½', 'tbsp', 2), '1 tbsp');
+  assert.equal(scaledAmount('1½', 'cup', 2), '3 cups');
+  assert.equal(scaledAmount('12⅓', 'cup', 3), '37 cups');
+  assert.equal(scaledAmount('⅔', 'tsp', '½'), '1/3 tsp');
+  assert.equal(scaledAmount('1⁄2', 'kg', 2), '1 kg');
+  assert.equal(grams({ quantity: '1 ¼', unit: 'kg' }), 1250);
+  assert.equal(scaledYield('½ cup / 2 portions', 2), '1 cup / 4 portions');
+  assert.equal(numericQuantity('½ or more'), null);
+});
+
+test('recipe item yields scale without changing dimensions or arbitrary prose', () => {
+  assert.equal(scaledYield('32 arancini', 2), '64 arancini');
+  assert.equal(scaledYield('6 bagels', 0.5), '3 bagels');
+  assert.equal(scaledYield('6 bagels (111 g each)', 2), null);
+  assert.equal(scaledYield('4 hours', 2), null);
+});

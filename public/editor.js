@@ -20,6 +20,7 @@ const escape = (value = '') =>
 const ingredient = () => ({
   id: crypto.randomUUID(),
   name: '',
+  notes: '',
   quantity: '',
   unit: 'g',
   specialPercent: '',
@@ -49,6 +50,7 @@ function readGroups() {
         const item = { id: row.dataset.ingredient };
         for (const key of [
           'name',
+          'notes',
           'quantity',
           'unit',
           'specialPercent',
@@ -106,7 +108,8 @@ function render() {
             position,
           ) => `<section data-ingredient="${escape(item.id)}" aria-label="Ingredient ${position + 1}">
 <div data-ingredient-fields><label>Ingredient<input data-field="name" maxlength="200" value="${escape(item.name)}" required></label><label>Quantity<input data-field="quantity" maxlength="80" value="${escape(item.quantity)}" placeholder="100"></label><label>Unit${unitSelect(item.unit)}</label></div>
-<details${item.specialPercent || item.specialBasis || item.componentId ? ' open' : ''}><summary>Options</summary>
+<details${item.notes || item.specialPercent || item.specialBasis || item.componentId ? ' open' : ''}><summary>Options</summary>
+<label>Ingredient notes<input data-field="notes" maxlength="200" value="${escape(item.notes || '')}" placeholder="e.g. finely chopped; optional; or more"></label>
 <label>Special scaling (%)<input data-field="specialPercent" inputmode="decimal" maxlength="40" value="${escape(item.specialPercent)}" placeholder="e.g. 1.6"></label>
 <label>Percentage basis<input data-field="specialBasis" maxlength="200" value="${escape(item.specialBasis)}" placeholder="e.g. total weight of all other ingredients"></label>
 <label>Component recipe<select data-field="componentId"><option value="">No component recipe</option>${components.map((component) => `<option value="${component.id}"${component.id === item.componentId ? ' selected' : ''}>${escape(component.title)}</option>`).join('')}</select></label></details>

@@ -183,21 +183,32 @@ thead th {
   border-bottom: 1px solid #555;
   white-space: nowrap;
 }
-thead th:nth-child(1),
-col:nth-child(1) {
+col[data-column='ingredient'] {
   width: 26%;
 }
-thead th:nth-child(2),
-col:nth-child(2) {
+col[data-column='quantity'] {
   width: 13%;
 }
-thead th:nth-child(3),
-col:nth-child(3) {
+col[data-column='scaling'] {
   width: 10%;
 }
-thead th:nth-child(4),
-col:nth-child(4) {
+col[data-column='procedure'] {
   width: 51%;
+}
+table[data-scaling='false'] col[data-column='ingredient'] {
+  width: 29%;
+}
+table[data-scaling='false'] col[data-column='quantity'] {
+  width: 17%;
+}
+table[data-scaling='false'] col[data-column='procedure'] {
+  width: 54%;
+}
+[data-stage-heading] th {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.035em;
+  color: #555;
 }
 th[scope='row'] {
   font-weight: 400;
@@ -226,9 +237,9 @@ article td[data-procedure] {
   padding-bottom: 0.55rem;
 }
 article thead th:nth-child(2),
-article thead th:nth-child(3),
+article table[data-scaling='true'] thead th:nth-child(3),
 article tbody th + td,
-article tbody th + td + td {
+article table[data-scaling='true'] tbody th + td + td {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }

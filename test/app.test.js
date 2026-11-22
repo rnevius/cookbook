@@ -291,6 +291,12 @@ test('invalid documents never replace an existing recipe', async (t) => {
       value.groups[0].ingredients[0].quantity = '-10';
     },
     (value) => {
+      value.groups[0].ingredients[0].quantity = '-½';
+    },
+    (value) => {
+      value.groups[0].ingredients[0].notes = 'x'.repeat(201);
+    },
+    (value) => {
       value.unexpected = 'field';
     },
     (value) => {
@@ -439,4 +445,40 @@ test('blank optional metadata and stages with no ingredients are supported', asy
     /Rest for <strong>30 min<\/strong>/,
   );
   assert.equal((await app.inject('/recipes/not-a-number')).statusCode, 404);
+});
+
+test('cards show stage names and escaped ingredient notes while retaining special ratios without a reference', async (t) => {
+  const app = await setup(t);
+  const input = exampleRecipe();
+  input.referenceId = null;
+  input.groups[0].title = 'Reduce <slowly>';
+  input.groups[0].ingredients[0].notes = '<b>Or more</b>';
+  input.groups[0].steps = ['Reduce at 90ºC for 10 minutes.'];
+  const { id } = (await create(app, input)).json();
+  const { body } = await app.inject(`/recipes/${id}?scale=2`);
+  assert.match(body, /scope="rowgroup" colspan="3">Reduce &lt;slowly&gt;/);
+  assert.match(body, /data-ingredient-note>&lt;b&gt;Or more&lt;\/b&gt;/);
+  assert.doesNotMatch(body, /<b>Or more|<th scope="col">Scaling/);
+  assert.match(body, /<strong>90ºC<\/strong>/);
+  assert.match(body, /<td>200 g<\/td>/);
+  const saved = (await app.inject(`/api/recipes/${id}`)).json();
+  assert.equal(saved.groups[0].ingredients[0].notes, '<b>Or more</b>');
+
+  input.groups[0].ingredients[0].specialPercent = '2';
+  input.groups[0].ingredients[0].specialBasis = 'total liquid';
+  input.groups.push({
+    id: 'rest',
+    title: 'Rest',
+    ingredients: [],
+    steps: ['Let stand.'],
+  });
+  await app.inject({
+    method: 'PUT',
+    url: `/api/recipes/${id}`,
+    payload: input,
+  });
+  const special = await app.inject(`/recipes/${id}`);
+  assert.match(special.body, /<th scope="col">Scaling/);
+  assert.match(special.body, /2% of total liquid/);
+  assert.match(special.body, /colspan="3">—/);
 });

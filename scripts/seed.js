@@ -1,57 +1,43 @@
-import { openDatabase, recipeStore } from '../src/db.js';
+import { pathToFileURL } from 'node:url';
+import { createApp } from '../src/app.js';
+import { seedRecipes } from './seed-data.js';
 
-const db = openDatabase();
-try {
-  const store = recipeStore(db);
-  const title = 'Lemon vinaigrette';
-  if (store.list().some((recipe) => recipe.title === title)) {
-    console.log('Example recipe already exists; nothing changed.');
-  } else {
-    const item = (id, name, quantity, unit = 'g') => ({
-      id,
-      name,
-      quantity,
-      unit,
-      specialPercent: '',
-      specialBasis: '',
-      componentId: null,
+// Use the API so seeds obey the same validation as recipes saved in the editor.
+export async function seedDatabase(app, recipes = seedRecipes) {
+  const existing = (await app.inject('/api/recipes')).json();
+  const titles = new Set(existing.map((recipe) => recipe.title.toLowerCase()));
+  const result = { created: [], skipped: [] };
+  for (const recipe of recipes) {
+    const title = recipe.title.trim();
+    if (titles.has(title.toLowerCase())) {
+      result.skipped.push(title);
+      continue;
+    }
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/recipes',
+      payload: recipe,
     });
-    const recipe = store.create({
-      title,
-      yield: 'About 160 g',
-      attribution: 'An example recipe for your notebook',
-      referenceId: 'oil',
-      notes:
-        'Whisk again before serving. The finished yield is an estimate; it is independent of the ingredient totals.',
-      groups: [
-        {
-          id: 'acid-stage',
-          title: 'Prepare the dressing base',
-          ingredients: [
-            item('lemon', 'Lemon juice', '40'),
-            item('mustard', 'Dijon mustard', '10'),
-            item('salt', 'Fine salt', '2'),
-          ],
-          steps: [
-            'Whisk the lemon juice, mustard, and salt together in a bowl.',
-          ],
-        },
-        {
-          id: 'oil-stage',
-          title: 'Emulsify',
-          ingredients: [
-            item('oil', 'Olive oil', '120'),
-            item('pepper', 'Black pepper', 'as needed', ''),
-          ],
-          steps: [
-            'Slowly pour the oil into the dressing base, whisking continuously until emulsified.',
-            'Taste and adjust the seasoning with black pepper.',
-          ],
-        },
-      ],
-    });
-    console.log(`Created example recipe: /recipes/${recipe.id}`);
+    if (response.statusCode !== 201)
+      throw new Error(`Unable to seed ${title}: ${response.json().message}`);
+    result.created.push(response.json());
+    titles.add(title.toLowerCase());
   }
-} finally {
-  db.close();
+  return result;
+}
+
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  const app = createApp();
+  try {
+    const result = await seedDatabase(app);
+    for (const recipe of result.created)
+      console.log(`Created ${recipe.title}: /recipes/${recipe.id}`);
+    for (const title of result.skipped)
+      console.log(`Skipped existing recipe: ${title}`);
+  } finally {
+    await app.close();
+  }
 }
