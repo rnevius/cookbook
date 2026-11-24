@@ -38,7 +38,7 @@ Add schema changes as new SQL files in `migrations/`; never edit applied migrati
 3. Copy [`.env.deploy.example`](.env.deploy.example) to `.env.deploy` and set the SSH host and HTTPS URL.
 
 ```sh
-mise exec -- npm run deploy:setup  # First deploy or service changes, via root SSH
+mise exec -- npm run deploy:setup  # First deploy or service changes, via SSH
 mise exec -- npm run deploy        # Later deploys, via cookbook-deploy SSH
 ```
 
